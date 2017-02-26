@@ -1,9 +1,17 @@
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE FlexibleContexts #-}
+
 module Lambda.Primitives where
 
+-- Local Imports
 import Lambda.Types
+import Lambda.Error
+-- Global Imports
+import Control.Monad.Except (throwError, MonadError)
 
 -- Primitives
-primitives :: [( String, [LispVal] -> LispVal)]
+primitives :: [( String, [LispVal] -> ThrowsError LispVal)]
 primitives = [( "+", numericBinop (+)),
               ( "-", numericBinop (-)),
               ( "*", numericBinop (*)),
@@ -11,48 +19,103 @@ primitives = [( "+", numericBinop (+)),
               ( "mod", numericBinop mod),
               ( "quotient", numericBinop quot),
               ( "remainder", numericBinop rem),
-              ( "symbol?", unaryOp symbolp),
-              ( "string?", unaryOp stringp),
-              ( "number?", unaryOp numberp),
-              ( "bool?", unaryOp boolp),
-              ( "list?", unaryOp listp),
-              ( "symbol->string", unaryOp symbol2string),
-              ( "string->symbol", unaryOp string2symbol)
-             ]
+              ( "symbol?", isLispVal symbolp),
+              ( "string?", isLispVal stringp),
+              ( "number?", isLispVal numberp),
+              ( "bool?", isLispVal boolp),
+              ( "list?", isLispVal listp),
+              ( "symbol->string", symbolToString),
+              ( "string->symbol", stringToSymbol),
+              ( "==", numEqBoolBinop (==)),
+              ( "<", numOrdBoolBinop (<)),
+              ( ">", numOrdBoolBinop (>)),
+              ( "/=", numEqBoolBinop (/=)),
+              ( ">=", numOrdBoolBinop (>=)),
+              ( "<=", numOrdBoolBinop (<=)),
+              ( "&&", boolBoolBinop (&&)),
+              ( "||", boolBoolBinop (||)),
+              ( "string=?", strBoolBinop (==)),
+              ( "string<?", strBoolBinop (<)),
+              ( "string>?", strBoolBinop (>)),
+              ( "string<=?", strBoolBinop (<=)),
+              ("string>=?", strBoolBinop (>=))]
 
--- Primitives Helper Functions
-numericBinop :: (Integer -> Integer -> Integer) -> [LispVal] -> LispVal
-numericBinop op params = Number $ foldl1 op $ map unpackNum params
+-- Binary Operations
+numericBinop :: (MonadError LispError m) => (Integer -> Integer -> Integer) -> [LispVal] -> m LispVal
+numericBinop op []           = throwError $ NumArgs 2 []
+numericBinop op singeVal@[_] = throwError $ NumArgs 2 singeVal
+numericBinop op params       = mapM unpackNum params >>= return . Number . foldl1 op
 
-unpackNum :: LispVal -> Integer
-unpackNum (Number n) = n
-unpackNum _ = 0
+boolBinop :: (MonadError LispError m) => (LispVal -> m a) -> (a -> a -> Bool) -> [LispVal] -> m LispVal
+boolBinop unpacker op args = if length args /= 2
+                                then throwError $ NumArgs 2 args
+                                else do left  <- unpacker $ args !! 0
+                                        right <- unpacker $ args !! 1
+                                        return $ Bool $ left `op` right
 
-unaryOp :: (LispVal -> LispVal) -> [LispVal] -> LispVal
-unaryOp f [v] = f v
+numEqBoolBinop :: (MonadError LispError m) => (Integer -> Integer -> Bool) -> [LispVal] -> m LispVal
+numEqBoolBinop  = boolBinop unpackNum
 
-symbolp, stringp, numberp, boolp, listp :: LispVal -> LispVal
+numOrdBoolBinop :: (MonadError LispError m) => (Integer -> Integer -> Bool) -> [LispVal] -> m LispVal
+numOrdBoolBinop  = boolBinop unpackNum
 
-symbolp (Atom _)       = Bool True
-symbolp _              = Bool False
-
-stringp (String _)     = Bool True
-stringp _              = Bool False
-
-numberp (Number _)     = Bool True
-numberp _              = Bool False
-
-boolp (Bool _)         = Bool True
-boolp _                = Bool False
-
-listp (List _)         = Bool True
-listp (DottedList _ _) = Bool True
-listp _                = Bool False
-
-symbol2string, string2symbol :: LispVal -> LispVal
-symbol2string (Atom s)   = String s
-symbol2string _          = String ""
-string2symbol (String a) = Atom a
-string2symbol _          = Atom ""
+-- eqBoolBinop :: (MonadError LispError m) => (forall a. Eq a => a -> a -> Bool) -> [LispVal] -> m LispVal
+-- eqBoolBinop f (Number a) (Number b) = return $ Bool (f a b)
 
 
+boolBoolBinop :: (MonadError LispError m) => (Bool -> Bool -> Bool) -> [LispVal] -> m LispVal
+boolBoolBinop = boolBinop unpackBool
+
+strBoolBinop :: (MonadError LispError m) => (String -> String -> Bool) -> [LispVal] -> m LispVal
+strBoolBinop = boolBinop unpackStr
+
+-- Unary Operations
+isLispVal :: (MonadError LispError m) => (LispVal -> Bool) -> [LispVal] -> m LispVal
+isLispVal f (l:[])     = return $ Bool $ f l
+isLispVal _ badArgList = throwError $ NumArgs 2 badArgList
+
+symbolp, stringp, numberp, boolp, listp :: LispVal -> Bool
+symbolp (Atom _)       = True
+symbolp _              = False
+
+stringp (String _)     = True
+stringp _              = False
+
+numberp (Number _)     = True
+numberp _              = False
+
+boolp (Bool _)         = True
+boolp _                = False
+
+listp (List _)         = True
+listp (DottedList _ _) = True
+listp _                = False
+
+symbolToString, stringToSymbol :: (MonadError LispError m) => [LispVal] -> m LispVal
+symbolToString (Atom s:[])  = return $ String s
+symbolToString (e:[])       = throwError $ TypeMismatch "symbol" e
+symbolToString e            = throwError $ NumArgs 1 e
+
+stringToSymbol (Atom s:[])  = return $ Atom s
+stringToSymbol (e:[])       = throwError $ TypeMismatch "string" e
+stringToSymbol e            = throwError $ NumArgs 1 e
+
+-- Unpack LispVals
+unpackNum :: (MonadError LispError m) => LispVal -> m Integer
+unpackNum (Number n) = return n
+unpackNum (String n) = let parsed = reads n in
+                           if null parsed
+                              then throwError $ TypeMismatch "number" $ String n
+                              else return $ fst $ parsed !! 0
+unpackNum (List [n]) = unpackNum n
+unpackNum notNum     = throwError $ TypeMismatch "number" notNum
+
+unpackBool :: (MonadError LispError m) => LispVal -> m Bool
+unpackBool (Bool b) = return b
+unpackBool notBool  = throwError $ TypeMismatch "boolean" notBool
+
+unpackStr :: (MonadError LispError m) => LispVal -> m String
+unpackStr (String s) = return s
+unpackStr (Number s) = return $ show s
+unpackStr (Bool s)   = return $ show s
+unpackStr notString  = throwError $ TypeMismatch "string" notString

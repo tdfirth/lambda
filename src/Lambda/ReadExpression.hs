@@ -5,28 +5,34 @@ module Lambda.ReadExpression
   ) where
 
 -- Local Imports
-import           Lambda.Error
-import           Lambda.Types
-import           Lambda.Primitives
-import           Lambda.Parse
+import Lambda.Error
+import Lambda.Types
+import Lambda.Primitives
+import Lambda.Parse
 -- Global Imports
-import           Text.ParserCombinators.Parsec hiding (spaces)
-
--- Evaluate
-eval :: LispVal -> LispVal
-eval val@(String _)             = val
-eval val@(Number _)             = val
-eval val@(Bool _)               = val
-eval (List [Atom "quote", val]) = val
-eval (List (Atom func : args))  = apply func $ map eval args
+import Text.ParserCombinators.Parsec hiding (spaces)
+import Control.Monad.Except
 
 -- Apply
-apply :: String -> [LispVal] -> LispVal
-apply func args = maybe (Bool False) ($ args) $ lookup func primitives
+apply :: String -> [LispVal] -> ThrowsError LispVal
+apply func args =
+  maybe (throwError $ NotFunction "Unrecognised primitive function args" func)
+        ($ args)
+        (lookup func primitives)
+
+-- Evaluate
+eval :: LispVal -> ThrowsError LispVal
+eval val@(String _)             = return val
+eval val@(Number _)             = return val
+eval val@(Bool _)               = return val
+eval (List [Atom "quote", val]) = return val
+eval (List (Atom func : args))  = mapM eval args >>= apply func
+eval badForm                    = throwError $
+                                  BadSpecialForm "Unrecognised special form" badForm
 
 -- Main read function
-readExpr :: String -> LispVal
+readExpr :: String -> ThrowsError LispVal
 readExpr input =
   case parse parseExpr "lisp" input of
-    Left err  -> String $ "No match: " ++ show err
-    Right val -> val
+    Left err  -> throwError $ Parser err
+    Right val -> return val

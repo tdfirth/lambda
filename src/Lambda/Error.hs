@@ -30,3 +30,5 @@ type ThrowsError = Either LispError
 -- Helper Functions for Parsing
 trapError action = catchError action (return . show)
 
+extractValue :: ThrowsError a -> a
+extractValue (Right val) = val
