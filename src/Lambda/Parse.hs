@@ -40,15 +40,6 @@ parseAtom = do
       "#f" -> Bool False
       _    -> Atom atom
 
-parseDottedList :: Parser LispVal
-parseDottedList = do
-  head <- endBy parseExpr spaces
-  tail <- char '.' >> spaces >> parseExpr
-  return $ DottedList head tail
-
-parseList :: Parser LispVal
-parseList = liftM List $ sepBy parseExpr spaces
-
 parseNumber :: Parser LispVal
 parseNumber = many1 digit >>= return . Number . read
 
@@ -135,6 +126,43 @@ parseQuoted = do
   x <- parseExpr
   return $ List [Atom "quote", x]
 
+parseUnQuoted :: Parser LispVal
+parseUnQuoted = do
+  char ','
+  x <- parseExpr
+  return $ List [Atom "unquoted", x]
+
+parseQuasiQuoted :: Parser LispVal
+parseQuasiQuoted = do
+  char '`'
+  x <- parseExpr
+  return $ List [Atom "quasiquote", x]
+
+parseBracketed :: Parser LispVal -> Parser LispVal
+parseBracketed p = try $ do
+  char '('
+  many space
+  x <- p
+  char ')'
+  return x
+
+parseDottedList :: Parser LispVal
+parseDottedList = do
+  head <- endBy parseExpr spaces
+  tail <- char '.' >> spaces >> parseExpr
+  return $ DottedList head tail
+
+parseList :: Parser LispVal
+parseList = liftM List $ sepEndBy parseExpr spaces
+
+parseVector :: Parser LispVal
+parseVector = do
+  string "#("
+  many space
+  x <- liftM Vector $ sepEndBy parseExpr spaces
+  char ')'
+  return x
+
 parseExpr :: Parser LispVal
 parseExpr = parseAtom
   <|> parseString
@@ -144,9 +172,9 @@ parseExpr = parseAtom
   <|> try parseNumber
   <|> try parseBool
   <|> try parseCharacter
-  <|> do char '('
-         x <- parseList <|> parseDottedList
-         char ')'
-         return x
-
-
+  <|> try parseQuoted
+  <|> try parseUnQuoted
+  <|> try parseQuasiQuoted
+  <|> parseBracketed parseList
+  <|> parseBracketed parseDottedList
+  <|> try parseVector

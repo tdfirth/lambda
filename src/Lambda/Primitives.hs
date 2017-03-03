@@ -8,7 +8,7 @@ module Lambda.Primitives where
 import Lambda.Types
 import Lambda.Error
 -- Global Imports
-import Control.Monad.Except (throwError, MonadError)
+import Control.Monad.Except (throwError, catchError, MonadError, liftM)
 
 -- Primitives
 primitives :: [( String, [LispVal] -> ThrowsError LispVal)]
@@ -26,7 +26,7 @@ primitives = [( "+", numericBinop (+)),
               ( "list?", isLispVal listp),
               ( "symbol->string", symbolToString),
               ( "string->symbol", stringToSymbol),
-              ( "==", numEqBoolBinop (==)),
+              ( "=", numEqBoolBinop (==)),
               ( "<", numOrdBoolBinop (<)),
               ( ">", numOrdBoolBinop (>)),
               ( "/=", numEqBoolBinop (/=)),
@@ -38,7 +38,13 @@ primitives = [( "+", numericBinop (+)),
               ( "string<?", strBoolBinop (<)),
               ( "string>?", strBoolBinop (>)),
               ( "string<=?", strBoolBinop (<=)),
-              ("string>=?", strBoolBinop (>=))]
+              ("string>=?", strBoolBinop (>=)),
+              ("car", car),
+              ("cdr", cdr),
+              ("cons", cons),
+              ("eq?", eqv),
+              ("eqv?", eqv),
+              ("equal?", equal)]
 
 -- Binary Operations
 numericBinop :: (MonadError LispError m) => (Integer -> Integer -> Integer) -> [LispVal] -> m LispVal
@@ -53,15 +59,14 @@ boolBinop unpacker op args = if length args /= 2
                                         right <- unpacker $ args !! 1
                                         return $ Bool $ left `op` right
 
-numEqBoolBinop :: (MonadError LispError m) => (Integer -> Integer -> Bool) -> [LispVal] -> m LispVal
-numEqBoolBinop  = boolBinop unpackNum
+--numEqBoolBinop :: (MonadError LispError m) => (Integer -> Integer -> Bool) -> [LispVal] -> m LispVal
+--numEqBoolBinop  = boolBinop unpackNum
 
 numOrdBoolBinop :: (MonadError LispError m) => (Integer -> Integer -> Bool) -> [LispVal] -> m LispVal
 numOrdBoolBinop  = boolBinop unpackNum
 
--- eqBoolBinop :: (MonadError LispError m) => (forall a. Eq a => a -> a -> Bool) -> [LispVal] -> m LispVal
--- eqBoolBinop f (Number a) (Number b) = return $ Bool (f a b)
-
+numEqBoolBinop :: (MonadError LispError m) => (forall a. Eq a => a -> a -> Bool) -> [LispVal] -> m LispVal
+numEqBoolBinop = boolBinop unpackNum
 
 boolBoolBinop :: (MonadError LispError m) => (Bool -> Bool -> Bool) -> [LispVal] -> m LispVal
 boolBoolBinop = boolBinop unpackBool
@@ -100,7 +105,61 @@ stringToSymbol (Atom s:[])  = return $ Atom s
 stringToSymbol (e:[])       = throwError $ TypeMismatch "string" e
 stringToSymbol e            = throwError $ NumArgs 1 e
 
+-- List Primitives
+car :: (MonadError LispError m) => [LispVal] -> m LispVal
+car[List (x : xs)]         = return x
+car[DottedList (x : xs) _] = return x
+car[badArg]                = throwError $ TypeMismatch "pair" badArg
+car badArgList             = throwError $ NumArgs 1 badArgList
+
+cdr :: (MonadError LispError m) => [LispVal] -> m LispVal
+cdr [List (x : xs)]         = return $ List xs
+cdr [DottedList [_] x]      = return x
+cdr [DottedList (_ : xs) x] = return $ DottedList xs x
+cdr [badArg]                = throwError $ TypeMismatch "pair" badArg
+cdr badArgList              = throwError $ NumArgs 1 badArgList
+
+cons :: (MonadError LispError m) => [LispVal] -> m LispVal
+cons [x, List []]             = return $ List [x]
+cons [x, List xs]             = return $ List $ x : xs
+cons [x, DottedList xs xLast] = return $ DottedList (x : xs) xLast
+cons [x, y]                   = return $ DottedList [x] y
+cons badArgList               = throwError $ NumArgs 2 badArgList
+
+-- Equivalence Primitives
+eqv :: (MonadError LispError m) => [LispVal] -> m LispVal
+eqv [(Bool arg1), (Bool arg2)]             = return $ Bool $ arg1 == arg2
+eqv [(Number arg1), (Number arg2)]         = return $ Bool $ arg1 == arg2
+eqv [(String arg1), (String arg2)]         = return $ Bool $ arg1 == arg2
+eqv [(Atom arg1), (Atom arg2)]             = return $ Bool $ arg1 == arg2
+eqv [(DottedList xs x), (DottedList ys y)] = eqv [List $ xs ++ [x], List $ ys ++ [y]]
+eqv [(List arg1), (List arg2)]             = return $ Bool $ (length arg1 == length arg2) &&
+                                                        (all eqvPair $ zip arg1 arg2)
+                                                          where eqvPair (x1, x2) = case eqv [x1, x2] of
+                                                                                     Left err -> False
+                                                                                     Right (Bool val) -> val
+eqv [_, _]                                 = return $ Bool False
+eqv badArgList                             = throwError $ NumArgs 2 badArgList
+
+
 -- Unpack LispVals
+data Unpacker m = forall a. Eq a => AnyUnpacker (LispVal -> m a)
+
+unpackEquals :: (MonadError LispError m) => LispVal -> LispVal -> Unpacker m -> m Bool
+unpackEquals a b (AnyUnpacker unpacker) = do
+               unpacked1 <- unpacker a
+               unpacked2 <- unpacker b
+               return $ unpacked2 == unpacked2
+        `catchError` (const $ return False)
+
+equal :: (MonadError LispError m) => [LispVal] -> m LispVal
+equal [a, b] = do
+  primitiveEquals <- liftM or $ mapM (unpackEquals a b)
+                           [AnyUnpacker unpackNum, AnyUnpacker unpackBool, AnyUnpacker unpackStr]
+  eqvEquals <- eqv [a, b]
+  return $ Bool $ (primitiveEquals || let (Bool x) = eqvEquals in x)
+equal badArgList = throwError $ NumArgs 2 badArgList
+
 unpackNum :: (MonadError LispError m) => LispVal -> m Integer
 unpackNum (Number n) = return n
 unpackNum (String n) = let parsed = reads n in

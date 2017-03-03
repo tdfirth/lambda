@@ -8,6 +8,7 @@ data LispVal
   = Atom String
   | List [LispVal]
   | DottedList [LispVal] LispVal
+  | Vector [LispVal]
   | Number Integer
   | Float Double
   | Ratio Rational
@@ -26,6 +27,7 @@ showVal (Bool True)            = "#t"
 showVal (Bool False)           = "#f"
 showVal (List contents)        = "(" ++ unwordsList contents ++ ")"
 showVal (DottedList head tail) = "(" ++ unwordsList head ++ " . " ++ showVal tail ++ ")"
+showVal (Vector contents)      = "(" ++ unwordsList contents ++ ")"
 
 unwordsList :: [LispVal] -> String
 unwordsList = unwords . map showVal
