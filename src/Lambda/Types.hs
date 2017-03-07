@@ -16,6 +16,7 @@ data LispVal
   | String String
   | Bool Bool
   | Character Char
+  deriving Eq
 
 instance Show LispVal where show = showVal
 

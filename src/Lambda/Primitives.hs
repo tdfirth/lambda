@@ -59,10 +59,7 @@ boolBinop unpacker op args = if length args /= 2
                                         right <- unpacker $ args !! 1
                                         return $ Bool $ left `op` right
 
---numEqBoolBinop :: (MonadError LispError m) => (Integer -> Integer -> Bool) -> [LispVal] -> m LispVal
---numEqBoolBinop  = boolBinop unpackNum
-
-numOrdBoolBinop :: (MonadError LispError m) => (Integer -> Integer -> Bool) -> [LispVal] -> m LispVal
+numOrdBoolBinop :: (MonadError LispError m) => (forall a. Ord a => a -> a -> Bool) -> [LispVal] -> m LispVal
 numOrdBoolBinop  = boolBinop unpackNum
 
 numEqBoolBinop :: (MonadError LispError m) => (forall a. Eq a => a -> a -> Bool) -> [LispVal] -> m LispVal
@@ -141,6 +138,17 @@ eqv [(List arg1), (List arg2)]             = return $ Bool $ (length arg1 == len
 eqv [_, _]                                 = return $ Bool False
 eqv badArgList                             = throwError $ NumArgs 2 badArgList
 
+equal :: (MonadError LispError m) => [LispVal] -> m LispVal
+equal [a, b] = do
+  primitiveEquals <- liftM or $ mapM (unpackEquals a b)
+                           [AnyUnpacker unpackNum, AnyUnpacker unpackBool, AnyUnpacker unpackStr]
+  eqvEquals <- eqv [a, b]
+  return $ Bool $ (primitiveEquals || let (Bool x) = eqvEquals in x)
+equal badArgList = throwError $ NumArgs 2 badArgList
+
+-- Predicate Primitives
+-- caseExp :: (MonadError LispError m) => [LispVal] -> m LispVal
+-- caseExp (key : expressions) = do
 
 -- Unpack LispVals
 data Unpacker m = forall a. Eq a => AnyUnpacker (LispVal -> m a)
@@ -151,14 +159,6 @@ unpackEquals a b (AnyUnpacker unpacker) = do
                unpacked2 <- unpacker b
                return $ unpacked2 == unpacked2
         `catchError` (const $ return False)
-
-equal :: (MonadError LispError m) => [LispVal] -> m LispVal
-equal [a, b] = do
-  primitiveEquals <- liftM or $ mapM (unpackEquals a b)
-                           [AnyUnpacker unpackNum, AnyUnpacker unpackBool, AnyUnpacker unpackStr]
-  eqvEquals <- eqv [a, b]
-  return $ Bool $ (primitiveEquals || let (Bool x) = eqvEquals in x)
-equal badArgList = throwError $ NumArgs 2 badArgList
 
 unpackNum :: (MonadError LispError m) => LispVal -> m Integer
 unpackNum (Number n) = return n
