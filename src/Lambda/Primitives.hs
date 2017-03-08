@@ -6,7 +6,6 @@ module Lambda.Primitives where
 
 -- Local Imports
 import Lambda.Types
-import Lambda.Error
 -- Global Imports
 import Control.Monad.Except (throwError, catchError, MonadError, liftM)
 

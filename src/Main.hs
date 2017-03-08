@@ -1,9 +1,9 @@
 module Main where
 
 -- Local Imports
+import Lambda.Types
 import Lambda.ReadExpression
-import Lambda.Error
-import Lambda.Variables
+import Lambda.Primitives
 -- Global Imports
 import System.Environment
 import System.IO
@@ -25,10 +25,14 @@ until_ pred prompt action = do
      else action result >> until_ pred prompt action
 
 runOne :: String -> IO ()
-runOne expr = nullEnv >>= flip evalAndPrint expr
+runOne expr = primitiveBindings >>= flip evalAndPrint expr
 
 runRepl :: IO()
-runRepl = nullEnv >>= until_ (== "quit") (readPrompt "lambda> ") . evalAndPrint
+runRepl = primitiveBindings >>= until_ (== "quit") (readPrompt "lambda> ") . evalAndPrint
+
+primitiveBindings :: IO Env
+primitiveBindings = nullEnv >>= (flip bindVars $ map makePrimitiveFunc primitives)
+  where makePrimitiveFunc (var, func) = (var, PrimitiveFunc func)
 
 -- Helper Functions
 flushStr :: String -> IO ()
