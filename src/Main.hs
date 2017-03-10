@@ -9,7 +9,7 @@ import System.Environment
 import System.IO
 import Control.Monad
 
-main :: IO()
+main :: IO ()
 main = do args <- getArgs
           case length args of
             0 -> runRepl
@@ -27,7 +27,7 @@ until_ pred prompt action = do
 runOne :: String -> IO ()
 runOne expr = primitiveBindings >>= flip evalAndPrint expr
 
-runRepl :: IO()
+runRepl :: IO ()
 runRepl = primitiveBindings >>= until_ (== "quit") (readPrompt "lambda> ") . evalAndPrint
 
 primitiveBindings :: IO Env
@@ -45,5 +45,5 @@ evalString :: Env -> String -> IO String
 evalString env expr = runIOThrows $ liftM show $
   (liftThrows $ readExpr expr) >>= eval env
 
-evalAndPrint :: Env -> String -> IO()
+evalAndPrint :: Env -> String -> IO ()
 evalAndPrint env expr = evalString env expr >>= putStrLn
