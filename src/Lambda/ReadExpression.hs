@@ -103,14 +103,3 @@ eval env badForm = throwError $ BadSpecialForm "Unrecognised special form" badFo
 makeFunc varargs env params body = return $ Func(map showVal params) varargs body env
 makeNormalFunc = makeFunc Nothing
 makeVarArgs = makeFunc . Just . showVal
-
-{-
--- Main read function
-readOrThrow :: Parser a -> String -> ThrowsError a
-readOrThrow parser input = case parse parser "lisp" input of
-                             Left err -> throwError $ Parser err
-                             Right val -> return val
-
-readExpr = readOrThrow parseExpr
-readExprList = readOrThrow (endBy parseExpr spaces)
--}
