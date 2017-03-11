@@ -6,8 +6,57 @@ module Lambda.Primitives where
 
 -- Local Imports
 import Lambda.Types
+import Lambda.ReadExpression
+import Lambda.Utils
 -- Global Imports
-import Control.Monad.Except (throwError, catchError, MonadError, liftM)
+import Control.Monad.Except
+import System.IO
+
+primitiveBindings :: IO Env
+primitiveBindings = nullEnv >>= (flip bindVars $ map (makeFunc IOFunc) ioPrimitives
+                                             ++ map (makeFunc PrimitiveFunc) primitives)
+  where makeFunc constructor (var, func) = (var, constructor func)
+
+-- IO Primitives
+ioPrimitives :: [(String, [LispVal] -> IOThrowsError LispVal)]
+ioPrimitives = [("apply", applyProc),
+                ("open-input-file", makePort ReadMode),
+                ("open-output-file", makePort WriteMode),
+                ("close-input-port", closePort),
+                ("close-output-port", closePort),
+                ("read", readProc),
+                ("write", writeProc),
+                ("read-contents", readContents),
+                ("read-all", readAll)]
+
+applyProc :: [LispVal] -> IOThrowsError LispVal
+applyProc [func, List args] = apply func args
+applyProc (func : args)     = apply func args
+
+makePort :: IOMode -> [LispVal] -> IOThrowsError LispVal
+makePort mode [String filename] = liftM Port $ liftIO $ openFile filename mode
+
+closePort :: [LispVal] -> IOThrowsError LispVal
+closePort [Port port] = liftIO $ hClose port >> (return $ Bool True)
+closePort _           = return $ Bool False
+
+readProc :: [LispVal] -> IOThrowsError LispVal
+readProc []          = writeProc [Port stdout]
+readProc [Port port] = (liftIO $ hGetLine port) >>= liftThrows . readExpr
+
+writeProc :: [LispVal] -> IOThrowsError LispVal
+writeProc [obj]            = writeProc [obj, Port stdout]
+writeProc [obj, Port port] = liftIO $ hPrint port obj >> (return $ Bool True)
+
+readContents :: [LispVal] -> IOThrowsError LispVal
+readContents [String filename] = liftM String $ liftIO $ readFile filename
+
+{-
+load :: String -> IOThrowsError [LispVal]
+load filename = (liftIO $ readFile filename) >>= liftThrows . readExprList
+-}
+readAll :: [LispVal] -> IOThrowsError LispVal
+readAll [String filename] = liftM List $ load filename
 
 -- Primitives
 primitives :: [( String, [LispVal] -> ThrowsError LispVal)]
@@ -123,6 +172,7 @@ cons [x, y]                   = return $ DottedList [x] y
 cons badArgList               = throwError $ NumArgs 2 badArgList
 
 -- Equivalence Primitives
+{-
 eqv :: (MonadError LispError m) => [LispVal] -> m LispVal
 eqv [(Bool arg1), (Bool arg2)]             = return $ Bool $ arg1 == arg2
 eqv [(Number arg1), (Number arg2)]         = return $ Bool $ arg1 == arg2
@@ -136,6 +186,7 @@ eqv [(List arg1), (List arg2)]             = return $ Bool $ (length arg1 == len
                                                                                      Right (Bool val) -> val
 eqv [_, _]                                 = return $ Bool False
 eqv badArgList                             = throwError $ NumArgs 2 badArgList
+-}
 
 equal :: (MonadError LispError m) => [LispVal] -> m LispVal
 equal [a, b] = do

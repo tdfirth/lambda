@@ -6,6 +6,7 @@ import Data.Complex
 import Control.Monad.Except
 import Text.ParserCombinators.Parsec.Error
 import Data.IORef
+import System.IO
 
 data LispVal = Atom String
   | List [LispVal]
@@ -18,6 +19,8 @@ data LispVal = Atom String
   | String String
   | Bool Bool
   | Character Char
+  | IOFunc ([LispVal] -> IOThrowsError LispVal)
+  | Port Handle
   | PrimitiveFunc ([LispVal] -> ThrowsError LispVal)
   | Func { params :: [String]
          , vararg :: (Maybe String)
@@ -27,7 +30,7 @@ data LispVal = Atom String
 
 instance Show LispVal where show = showVal
 -- This feels like a hack...not sure why it is working or if it truly is
-instance Eq LispVal where x == y = x == y
+instance Eq LispVal where (==) = (==)
 
 showVal :: LispVal -> String
 showVal (String contents)      = "\"" ++ contents ++ "\""
@@ -38,6 +41,8 @@ showVal (Bool False)           = "#f"
 showVal (List contents)        = "(" ++ unwordsList contents ++ ")"
 showVal (DottedList head tail) = "(" ++ unwordsList head ++ " . " ++ showVal tail ++ ")"
 showVal (Vector contents)      = "(" ++ unwordsList contents ++ ")"
+showVal (IOFunc _)             = "<IO primitive>"
+showVal (Port _)               = "<IO port>"
 showVal (PrimitiveFunc _)      = "<primitive>"
 showVal (Func {params = args,
                vararg = varargs,

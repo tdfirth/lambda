@@ -11,10 +11,7 @@ import Control.Monad
 
 main :: IO ()
 main = do args <- getArgs
-          case length args of
-            0 -> runRepl
-            1 -> runOne $ args !! 0
-            otherwise -> putStrLn "Program only takes 0 or 1 argument!"
+          if null args then runRepl else runOne $ args
 
 -- Set up main loop
 until_ :: Monad m => (a -> Bool) -> m a -> (a -> m()) -> m()
@@ -24,15 +21,13 @@ until_ pred prompt action = do
      then return ()
      else action result >> until_ pred prompt action
 
-runOne :: String -> IO ()
-runOne expr = primitiveBindings >>= flip evalAndPrint expr
+runOne :: [String] -> IO ()
+runOne args = do
+  env <- primitiveBindings >>= flip bindVars [("args", List $ map String $ drop 1 args)]
+  (runIOThrows $ liftM show $ eval env (List [Atom "load", String (args !! 0)])) >>= hPutStrLn stderr
 
 runRepl :: IO ()
 runRepl = primitiveBindings >>= until_ (== "quit") (readPrompt "lambda> ") . evalAndPrint
-
-primitiveBindings :: IO Env
-primitiveBindings = nullEnv >>= (flip bindVars $ map makePrimitiveFunc primitives)
-  where makePrimitiveFunc (var, func) = (var, PrimitiveFunc func)
 
 -- Helper Functions
 flushStr :: String -> IO ()

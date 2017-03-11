@@ -1,19 +1,22 @@
 module Lambda.ReadExpression
   ( symbol
   , readExpr
+  , readExprList
   , eval
+  , apply
   ) where
 
 -- Local Imports
 import Lambda.Types
-import Lambda.Primitives
 import Lambda.Parse
+import Lambda.Utils
 -- Global Imports
 import Text.ParserCombinators.Parsec hiding (spaces)
 import Control.Monad.Except
 
 -- Apply
 apply :: LispVal -> [LispVal] -> IOThrowsError LispVal
+apply (IOFunc func) args = func args
 apply (PrimitiveFunc func) args = liftThrows $ func args
 apply (Func params varargs body closure) args =
   if num params /= num args && varargs == Nothing
@@ -22,10 +25,10 @@ apply (Func params varargs body closure) args =
        where remainingArgs       = drop (length params) args
              num                 = toInteger . length
              evalBody env        = liftM last $ mapM (eval env) body
-             bindVarArgs arg env =
-               case arg of
+             bindVarArgs arg env = case arg of
                  Just argName -> liftIO $ bindVars env [(argName, List $ remainingArgs)]
                  Nothing -> return env
+apply e _ = throwError $ TypeMismatch "function" e
 
 -- Evaluate
 eval :: Env -> LispVal -> IOThrowsError LispVal
@@ -86,6 +89,9 @@ eval env (List (Atom "lambda" : DottedList params varargs : body)) =
 eval env (List (Atom "lambda" : varargs@(Atom _) : body)) =
   makeVarArgs varargs env [] body
 
+eval env (List [Atom "load", String filename]) =
+  load filename >>= liftM last . mapM (eval env)
+
 eval env (List (function : args)) = do
   func <- eval env function
   argVals <- mapM (eval env) args
@@ -98,9 +104,13 @@ makeFunc varargs env params body = return $ Func(map showVal params) varargs bod
 makeNormalFunc = makeFunc Nothing
 makeVarArgs = makeFunc . Just . showVal
 
+{-
 -- Main read function
-readExpr :: String -> ThrowsError LispVal
-readExpr input =
-  case parse parseExpr "lisp" input of
-    Left err  -> throwError $ Parser err
-    Right val -> return val
+readOrThrow :: Parser a -> String -> ThrowsError a
+readOrThrow parser input = case parse parser "lisp" input of
+                             Left err -> throwError $ Parser err
+                             Right val -> return val
+
+readExpr = readOrThrow parseExpr
+readExprList = readOrThrow (endBy parseExpr spaces)
+-}

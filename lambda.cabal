@@ -21,6 +21,7 @@ executable lambda
                      , Lambda.ReadExpression
                      , Lambda.Primitives
                      , Lambda.Parse
+                     , Lambda.Utils
   -- other-modules:
   -- other-extensions:
   build-depends:       base
