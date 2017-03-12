@@ -26,7 +26,7 @@
 (define (foldl func acc lst)
   (if (null? lst)
     acc
-    (foldl func (func accum (car lst)) (cdr lst))))
+    (foldl func (func acc (car lst)) (cdr lst))))
 
 (define fold foldl)
 (define reduce foldr)

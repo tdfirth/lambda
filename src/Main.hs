@@ -8,37 +8,39 @@ import Lambda.Primitives
 import System.Environment
 import System.IO
 import Control.Monad
+import System.Console.Haskeline
+import Control.Monad.Trans (lift)
+import Control.Monad.State.Strict
 
 main :: IO ()
 main = do args <- getArgs
-          if null args then runRepl else runOne $ args
+          if null args then runRepl else runProgram $ args
 
--- Set up main loop
-until_ :: Monad m => (a -> Bool) -> m a -> (a -> m()) -> m()
-until_ pred prompt action = do
-  result <- prompt
-  if pred result
-     then return ()
-     else action result >> until_ pred prompt action
+-- Type definitions and start state (primitives).
+type REPL  = StateT Env IO
+startState = primitiveBindings
 
-runOne :: [String] -> IO ()
-runOne args = do
-  env <- primitiveBindings >>= flip bindVars [("args", List $ map String $ drop 1 args)]
-  (runIOThrows $ liftM show $ eval env (List [Atom "load", String (args !! 0)])) >>= hPutStrLn stderr
-
+-- Run the interactive REPL.
 runRepl :: IO ()
-runRepl = primitiveBindings >>= until_ (== "quit") (readPrompt "lambda> ") . evalAndPrint
+runRepl = runInputT defaultSettings loop where
+  loop :: InputT IO ()
+  loop = do
+    input <- getInputLine "lambda> "
+    case input of
+      Nothing -> return ()
+      Just "quit" -> return ()
+      Just input -> (outputStrLn $ "Input was: " ++ input) >> loop
+      -- Just input -> evaluate input >> loop
+
+-- Executed a single program file as specified on the command line.
+runProgram :: [String] -> IO ()
+runProgram args = do
+  env <- startState >>= flip bindVars [("args", List $ map String $ drop 1 args)]
+  (runIOThrows $ liftM show $ eval env (List [Atom "load", String (head args)])) >>= hPutStrLn stderr
 
 -- Helper Functions
-flushStr :: String -> IO ()
-flushStr str = putStr str >> hFlush stdout
-
-readPrompt :: String -> IO String
-readPrompt prompt = flushStr prompt >> getLine
-
-evalString :: Env -> String -> IO String
-evalString env expr = runIOThrows $ liftM show $
-  (liftThrows $ readExpr expr) >>= eval env
-
 evalAndPrint :: Env -> String -> IO ()
 evalAndPrint env expr = evalString env expr >>= putStrLn
+
+evalString :: Env -> String -> IO String
+evalString env expr = runIOThrows $ liftM show $ (liftThrows $ readExpr expr) >>= eval env
