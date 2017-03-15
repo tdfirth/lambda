@@ -23,7 +23,7 @@ runRepl = primitiveBindings >>= runInputT defaultSettings . loop where
     input <- getInputLine "lambda> "
     case input of
       Nothing              -> return ()
-      Just (':' : command) -> lift $handleCommand command
+      Just (':' : command) -> lift $ handleCommand command
       Just input           -> (lift $ evalAndPrint input state) >> loop state
 
 -- Executed a single program file as specified on the command line.
