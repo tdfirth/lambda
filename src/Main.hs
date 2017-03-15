@@ -13,7 +13,7 @@ import Control.Monad.Trans (lift)
 
 main :: IO ()
 main = do args <- getArgs
-          if null args then runRepl else runOne $ args
+          if null args then runRepl else runProgram $ args
 
 -- Set up main loop
 runRepl :: IO ()
@@ -26,31 +26,15 @@ runRepl = runInputT defaultSettings loop where
       Just "quit" -> return ()
       Just input -> (lift $ primitiveBindings >>= flip evalAndPrint input) >> loop
 
-  -- loop = primitiveBindings >>= until_ (== "quit") (readPrompt "lambda> ") . evalAndPrint
-{-
-until_ :: Monad m => (a -> Bool) -> m a -> (a -> m()) -> m()
-until_ pred prompt action = do
-  result <- prompt
-  if pred result
-     then return ()
-     else action result >> until_ pred prompt action
--}
-
-runOne :: [String] -> IO ()
-runOne args = do
+-- Executed a single program file as specified on the command line.
+runProgram :: [String] -> IO ()
+runProgram args = do
   env <- primitiveBindings >>= flip bindVars [("args", List $ map String $ drop 1 args)]
-  (runIOThrows $ liftM show $ eval env (List [Atom "load", String (args !! 0)])) >>= hPutStrLn stderr
+  (runIOThrows $ liftM show $ eval env (List [Atom "load", String (head args)])) >>= hPutStrLn stderr
 
 -- Helper Functions
-flushStr :: String -> IO ()
-flushStr str = putStr str >> hFlush stdout
-
-readPrompt :: String -> IO String
-readPrompt prompt = flushStr prompt >> getLine
-
-evalString :: Env -> String -> IO String
-evalString env expr = runIOThrows $ liftM show $
-  (liftThrows $ readExpr expr) >>= eval env
-
 evalAndPrint :: Env -> String -> IO ()
 evalAndPrint env expr = evalString env expr >>= putStrLn
+
+evalString :: Env -> String -> IO String
+evalString env expr = runIOThrows $ liftM show $ (liftThrows $ readExpr expr) >>= eval env

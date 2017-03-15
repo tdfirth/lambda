@@ -13,7 +13,7 @@ load :: String -> IOThrowsError [LispVal]
 load filename = (liftIO $ readFile filename) >>= liftThrows . readExprList
 
 readOrThrow :: Parser a -> String -> ThrowsError a
-readOrThrow parser input = case parse parser "lisp" input of
+readOrThrow parser input = case parse parser "lambda" input of
                              Left err -> throwError $ Parser err
                              Right val -> return val
 
