@@ -17,14 +17,14 @@ main = do args <- getArgs
 
 -- Set up main loop
 runRepl :: IO ()
-runRepl = runInputT defaultSettings loop where
-  loop :: InputT IO ()
-  loop = do
+runRepl = primitiveBindings >>= runInputT defaultSettings . loop where
+  loop :: Env -> InputT IO ()
+  loop state = do
     input <- getInputLine "lambda> "
     case input of
-      Nothing -> return ()
+      Nothing     -> return ()
       Just "quit" -> return ()
-      Just input -> (lift $ primitiveBindings >>= flip evalAndPrint input) >> loop
+      Just input  -> (lift $ evalAndPrint input state) >> loop state
 
 -- Executed a single program file as specified on the command line.
 runProgram :: [String] -> IO ()
@@ -33,8 +33,8 @@ runProgram args = do
   (runIOThrows $ liftM show $ eval env (List [Atom "load", String (head args)])) >>= hPutStrLn stderr
 
 -- Helper Functions
-evalAndPrint :: Env -> String -> IO ()
-evalAndPrint env expr = evalString env expr >>= putStrLn
+evalAndPrint :: String -> Env -> IO ()
+evalAndPrint expr env = evalString expr env >>= putStrLn
 
-evalString :: Env -> String -> IO String
-evalString env expr = runIOThrows $ liftM show $ (liftThrows $ readExpr expr) >>= eval env
+evalString :: String -> Env -> IO String
+evalString expr env = runIOThrows $ liftM show $ (liftThrows $ readExpr expr) >>= eval env
