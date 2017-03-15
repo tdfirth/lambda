@@ -13,7 +13,7 @@ import Control.Monad.Trans (lift)
 
 main :: IO ()
 main = do args <- getArgs
-          if null args then runRepl else runProgram $ args
+          if null args then runRepl else runProgram args
 
 -- Set up main loop
 runRepl :: IO ()
