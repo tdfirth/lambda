@@ -23,7 +23,7 @@ runRepl = primitiveBindings >>= runInputT defaultSettings . loop where
     input <- getInputLine "lambda> "
     case input of
       Nothing              -> return ()
-      Just (':' : command) -> lift $ handleCommand command
+      Just (':' : command) -> lift $ (handleCommand command state)
       Just input           -> (lift $ evalAndPrint input state) >> loop state
 
 -- Executed a single program file as specified on the command line.
@@ -39,6 +39,10 @@ evalAndPrint expr env = evalString expr env >>= putStrLn
 evalString :: String -> Env -> IO String
 evalString expr env = runIOThrows $ liftM show $ (liftThrows $ readExpr expr) >>= eval env
 
-handleCommand :: String -> IO ()
-handleCommand ("q")    = return ()
-handleCommand ("quit") = return ()
+handleCommand :: String -> Env -> IO ()
+handleCommand s e =
+  case s of
+    "q" -> return ()
+    "quit" -> return ()
+    "help" -> putStrLn "No help for you I'm afraid..."
+-- handleCommand ("env")  =
