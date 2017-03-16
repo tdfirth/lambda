@@ -10,6 +10,7 @@ import System.IO
 import Control.Monad
 import System.Console.Haskeline
 import Control.Monad.Trans (lift)
+import GHC.Types
 
 main :: IO ()
 main = do args <- getArgs
@@ -22,9 +23,13 @@ runRepl = primitiveBindings >>= runInputT defaultSettings . loop where
   loop state = do
     input <- getInputLine "lambda> "
     case input of
-      Nothing              -> return ()
-      Just (':' : command) -> lift $ (handleCommand command state)
-      Just input           -> (lift $ evalAndPrint input state) >> loop state
+      Nothing -> return ()
+      Just (':' : command) -> do
+        action <- lift $ handleCommand command state
+        case action of
+          True  -> loop state
+          False -> return ()
+      Just input -> (lift $ evalAndPrint input state) >> loop state
 
 -- Executed a single program file as specified on the command line.
 runProgram :: [String] -> IO ()
@@ -39,10 +44,10 @@ evalAndPrint expr env = evalString expr env >>= putStrLn
 evalString :: String -> Env -> IO String
 evalString expr env = runIOThrows $ liftM show $ (liftThrows $ readExpr expr) >>= eval env
 
-handleCommand :: String -> Env -> IO ()
+handleCommand :: String -> Env -> IO Bool
 handleCommand s e =
   case s of
-    "q" -> return ()
-    "quit" -> return ()
-    "help" -> putStrLn "No help for you I'm afraid..."
+    "q"    -> return False
+    "quit" -> return False
+    "help" -> putStrLn "No help for you I'm afraid..." >> return True
 -- handleCommand ("env")  =
