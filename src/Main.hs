@@ -10,7 +10,6 @@ import System.IO
 import Control.Monad
 import System.Console.Haskeline
 import Control.Monad.Trans (lift)
-import GHC.Types
 
 main :: IO ()
 main = do args <- getArgs
