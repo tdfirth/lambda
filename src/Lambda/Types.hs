@@ -8,7 +8,8 @@ import Text.ParserCombinators.Parsec.Error
 import Data.IORef
 import System.IO
 
-data LispVal = Atom String
+data LispVal
+  = Atom String
   | List [LispVal]
   | DottedList [LispVal] LispVal
   | Vector [LispVal]
@@ -22,9 +23,9 @@ data LispVal = Atom String
   | IOFunc ([LispVal] -> IOThrowsError LispVal)
   | Port Handle
   | PrimitiveFunc ([LispVal] -> ThrowsError LispVal)
-  | Func { params :: [String]
-         , vararg :: (Maybe String)
-         , body :: [LispVal]
+  | Func { params  :: [String]
+         , vararg  :: (Maybe String)
+         , body    :: [LispVal]
          , closure :: Env
          }
 
