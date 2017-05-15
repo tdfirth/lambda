@@ -4,4 +4,5 @@ import           Lambda.Types
 
 import qualified Data.Map.Strict as Map
 
-return
+foo :: Int
+foo = 1
