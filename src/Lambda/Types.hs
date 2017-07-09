@@ -45,9 +45,9 @@ showVal (Vector contents)      = "(" ++ unwordsList contents ++ ")"
 showVal (IOFunc _)             = "<IO primitive>"
 showVal (Port _)               = "<IO port>"
 showVal (PrimitiveFunc _)      = "<primitive>"
-showVal (Func {params = args,
-               vararg = varargs,
-               body = body,
+showVal (Func {params = args ,
+vararg = varargs             ,
+body = body                  ,
                closure = env}) = "(lambda (" ++ unwords (map show args) ++
                  (case varargs of
                     Nothing -> ""
@@ -138,5 +138,3 @@ bindVars envRef bindings = readIORef envRef >>= extendEnv bindings >>= newIORef
   where extendEnv bindings env = liftM (++ env) (mapM addBinding bindings)
         addBinding (var, value) = do ref <- newIORef value
                                      return (var, ref)
-
-
