@@ -7,6 +7,7 @@ import Control.Monad.Except
 import Text.ParserCombinators.Parsec.Error
 import Data.IORef
 import System.IO
+import qualified Data.Map.Strict as Map
 
 data LispVal
   = Atom String
@@ -84,13 +85,6 @@ trapError action = catchError action (return . show)
 extractValue :: ThrowsError a -> a
 extractValue (Right val) = val
 
--- Environment Definition
-type Env = IORef [(String, IORef LispVal)]
-
--- Create empty Environment
-nullEnv :: IO Env
-nullEnv = newIORef []
-
 -- Environment Errors
 type IOThrowsError = ExceptT LispError IO
 
@@ -103,38 +97,55 @@ liftThrows (Right val) = return val
 runIOThrows :: IOThrowsError String -> IO String
 runIOThrows action = runExceptT (trapError action) >>= return . extractValue
 
--- Main setting and getting functionality
+-- Environment Definition
+type Env = IORef (Map.Map String (IORef LispVal))
+
+nullEnv :: IO Env
+nullEnv = newIORef Map.empty
+
 isBound :: Env -> String -> IO Bool
-isBound envRef var = readIORef envRef >>= return . maybe False (const True) . lookup var
+isBound e s = readIORef e >>= return . Map.member s
 
 getVar :: Env -> String -> IOThrowsError LispVal
-getVar envRef var = do
-  env <- liftIO $ readIORef envRef
-  maybe (throwError $ UnboundVar "Getting an unbound variable" var)
-        (liftIO . readIORef)
-        (lookup var env)
+getVar e s = do
+  env <- liftIO $ readIORef e
+  case Map.lookup s env of
+    Just v  -> liftIO $ readIORef v
+    Nothing -> throwError $ UnboundVar "Trying to get an unbound variable..." s
 
 setVar :: Env -> String -> LispVal -> IOThrowsError LispVal
-setVar envRef var value = do
-  env <- liftIO $ readIORef envRef
-  maybe (throwError $ UnboundVar "Setting an unbound variable" var)
-        (liftIO . (flip writeIORef value))
-        (lookup var env)
-  return value
+setVar e s l = do
+  env <- liftIO $ readIORef e
+  case Map.lookup s env of
+    Just v  -> liftIO $ writeIORef v l
+    Nothing -> throwError $ UnboundVar "Trying to update an unbound variable.." s
+  return l
 
 defineVar :: Env -> String -> LispVal -> IOThrowsError LispVal
-defineVar envRef var value = do
-  alreadyDefined <- liftIO $ isBound envRef var
-  if alreadyDefined
-     then setVar envRef var value >> return value
-     else liftIO $ do
-       valueRef <- newIORef value
-       env <- readIORef envRef
-       writeIORef envRef ((var, valueRef) : env)
-       return value
+defineVar e s l = do
+  defined <- liftIO $ isBound e s
+  if defined then setVar e s l
+  else liftIO $ do
+    newVar <- newIORef l
+    modifyIORef' e $ Map.insert s newVar
+    return l
 
 bindVars :: Env -> [(String, LispVal)] -> IO Env
-bindVars envRef bindings = readIORef envRef >>= extendEnv bindings >>= newIORef
-  where extendEnv bindings env = liftM (++ env) (mapM addBinding bindings)
-        addBinding (var, value) = do ref <- newIORef value
-                                     return (var, ref)
+bindVars e ls = do
+  updates <- mapM mkRef ls >>= return . Map.fromList
+  modifyIORef' e (Map.union updates)
+  return e
+    where
+      mkRef :: (String, LispVal) -> IO (String, IORef LispVal)
+      mkRef (s, l) = newIORef l >>= return . (,) s
+
+showEnv :: Env -> IO String
+showEnv e = do
+  env <- readIORef e
+  vars <- return $ Map.toList env
+  (sequence $ map printOne vars) >>= return . unlines
+    where
+      printOne :: (String, IORef LispVal) -> IO String
+      printOne (s, l) = do
+        lispval <- readIORef l
+        return $ s ++ " : " ++ show lispval

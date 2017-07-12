@@ -48,5 +48,9 @@ handleCommand s e =
   case s of
     "q"    -> return False
     "quit" -> return False
+    "h"    -> putStrLn "No help for you I'm afraid..." >> return True
     "help" -> putStrLn "No help for you I'm afraid..." >> return True
+    "e"    -> showEnv e >>= putStrLn >> return True
+    "env"  -> showEnv e >>= putStrLn >> return True
+
 -- handleCommand ("env")  =
